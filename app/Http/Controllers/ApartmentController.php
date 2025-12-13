@@ -14,11 +14,16 @@ class ApartmentController extends Controller
     $user = $request->user();
 
     if (! $user) {
-        return response()->json(['message' => 'not auth'], 401);
+        return response()->json([
+            'status'=>0,
+            'data'=>[],
+            'message' => 'not auth'], 401);
     }
 
     if (! $user->is_approved) {
         return response()->json([
+            'status'=>0,
+            'data'=>[],
             'message' => 'Account awaiting admin approval. Please wait.'
         ], 403);
     }
@@ -27,14 +32,15 @@ class ApartmentController extends Controller
     $page = (int) $request->get('page', 1);
 
     $paginator = Apartment::with('images')
-        ->where('is_approved', true) 
+        ->withAvg('ratings', 'rating')     // ⭐ متوسط التقييم
+        ->withCount('ratings')             // 👤 عدد المقيمين
+        ->where('is_approved', true)
         ->paginate($perPage, ['*'], 'page', $page);
 
     return response()->json([
         "status" => 1,
         'message' => 'approved apartments',
-        'data' => $paginator->items(), 
-        
+        'data' => $paginator->items(),
     ]);
 }
 public function show(Request $request, $id)
@@ -42,27 +48,41 @@ public function show(Request $request, $id)
     $user = $request->user();
 
     if (! $user) {
-        return response()->json(['message' => 'not auth'], 401);
+        return response()->json([
+            'status'=>0,
+            'data'=>[],
+            'message' => 'not auth'], 401);
     }
 
     if (! $user->is_approved) {
         return response()->json([
+            'status'=>0,
+            'data'=>[],
             'message' => 'Account awaiting admin approval. Please wait.'
         ], 403);
     }
 
     try {
-        $apartment = Apartment::with('images')->findOrFail($id);
+        $apartment = Apartment::with('images')
+            ->withAvg('ratings', 'rating')   // ⭐ متوسط التقييم
+            ->withCount('ratings')           // 👤 عدد المقيمين
+            ->findOrFail($id);
 
         return response()->json([
-            'apartment' => $apartment
+            'status' => 1,
+            'data'=>['apartment' => $apartment],
+            'message'=>'this apartment'
         ], 200);
+
     } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
         return response()->json([
+            'status' => 0,
             'message' => 'Apartment not found',
+            'data'=>[]
         ], 404);
     }
 }
+
 
     
     public function store(Request $request)
@@ -70,17 +90,25 @@ public function show(Request $request, $id)
     $user = $request->user();
 
     if (! $user) {
-        return response()->json(['message' => 'not auth'], 401);
+        return response()->json([
+            'status'=>0,
+            'data'=>[],
+            'message' => 'not auth'], 401);
     }
 
     if (!$user->is_approved) {
         return response()->json([
+            'status'=>0,
+            'data'=>[],
             'message' => 'Account awaiting admin approval. Please wait.'
         ], 403);
     }
 
     if ($user->role !== 'landlord') {
-        return response()->json(['message' => 'not landlord'], 403);
+        return response()->json([
+            'status'=>0,
+            'data'=>[],
+            'message' => 'not landlord'], 403);
     }
 
     $validated = $request->validate([
@@ -114,8 +142,9 @@ public function show(Request $request, $id)
     }
 
     return response()->json([
+        'status'=>1,
         'message'   => 'Apartment created successfully',
-        'apartment' => $apartment->load('images')
+      'data'=>  ['apartment' => $apartment->load('images')]
     ], 201);
 }
 
@@ -124,11 +153,16 @@ public function search(Request $request)
     $user = $request->user();
 
     if (! $user) {
-        return response()->json(['message' => 'not auth'], 401);
+        return response()->json([
+            'status'=>0,
+            'data'=>[],
+            'message' => 'not auth'], 401);
     }
 
     if (! $user->is_approved) {
         return response()->json([
+            'status'=>0,
+            'data'=>[],
             'message' => 'Account awaiting admin approval. Please wait.'
         ], 403);
     }
@@ -155,13 +189,17 @@ public function search(Request $request)
 
     if ($validator->fails()) {
         return response()->json([
+            'status'=>0,
+            'data'=>[],
             'message' => 'Invalid filter parameters',
             'errors'  => $validator->errors()
         ], 422);
     }
 
     $query = Apartment::with('images')
-                       ->where('is_approved', true); 
+        ->withAvg('ratings', 'rating')   // ⭐ متوسط التقييم
+        ->withCount('ratings')           // 👤 عدد المقيمين
+        ->where('is_approved', true);
 
     if ($request->filled('state'))           $query->where('state', 'like', '%' . $request->state . '%');
     if ($request->filled('city'))            $query->where('city', 'like', '%' . $request->city . '%');
@@ -191,19 +229,23 @@ public function search(Request $request)
     }
 
     switch ($request->get('sort')) {
-        case 'price_asc': $query->orderBy('price', 'asc'); break;
+        case 'price_asc':  $query->orderBy('price', 'asc'); break;
         case 'price_desc': $query->orderBy('price', 'desc'); break;
-        case 'oldest': $query->orderBy('created_at', 'asc'); break;
+        case 'oldest':     $query->orderBy('created_at', 'asc'); break;
         case 'latest':
-        default: $query->orderBy('created_at', 'desc'); break;
+        default:           $query->orderBy('created_at', 'desc'); break;
     }
 
-    $perPage = (int) $request->get('per_page', 10);
-    $page    = (int) $request->get('page', 1);
-    $paginator = $query->paginate($perPage, ['*'], 'page', $page)->appends($request->query());
+    $perPage   = (int) $request->get('per_page', 10);
+    $page      = (int) $request->get('page', 1);
+    $paginator = $query->paginate($perPage, ['*'], 'page', $page)
+                       ->appends($request->query());
 
     return response()->json([
-        'data' => $paginator->items()
+        'status' => 1,
+        'message'=>'your serch',
+        'data'   => $paginator->items()
     ]);
 }
+
 }

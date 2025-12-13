@@ -11,7 +11,6 @@ class Apartment extends Model
 {
     use HasFactory;
 
-    // الحقول المسموح تعبئتها
     protected $fillable = [
         'user_id',
         'state',
@@ -30,9 +29,7 @@ class Apartment extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    /**
-     * الحجوزات الخاصة بهذه الشقة
-     */
+    
     public function bookings()
     {
         return $this->hasMany(Booking::class, 'apartment_id');
