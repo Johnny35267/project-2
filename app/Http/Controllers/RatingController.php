@@ -16,7 +16,6 @@ public function addRating(Request $request, $apartmentId)
 
     $request->validate([
         'rating' => 'required|integer|min:1|max:5',
-        'comment' => 'nullable|string|max:500',
     ]);
 
     // التحقق أن المستأجر قام بالحجز من قبل للشقة (approved)
@@ -27,72 +26,81 @@ public function addRating(Request $request, $apartmentId)
 
     if (! $hasBooking) {
         return response()->json([
+            'status'=>0,
+            'data'=>[],
             'message' => 'You can only rate an apartment you have booked.'
         ], 403);
     }
+$hasBooking = Booking::where('user_id', $user->id)
+        ->where('apartment_id', $apartmentId)->exists();
+        if($hasBooking){
+            return response()->json([
+            'status'=>0,
+            'data'=>[],
+            'message' => 'you rated this befor'
+        ], 403);
+        }
 
-    // منع تكرار التقييم لنفس الشقة
-    $rating = Rating::updateOrCreate(
+    $rating = Rating::Create(
         [
             'user_id' => $user->id,
             'apartment_id' => $apartmentId,
-        ],
-        [
             'rating' => $request->rating,
             'comment' => $request->comment
         ]
     );
 
     return response()->json([
+        'status'=>1,
         'message' => 'Rating saved successfully.',
         'data' => $rating
     ]);
 }
-public function getApartmentRatings(Request $request, $apartmentId)
-{
-    // التحقق من وجود الشقة
-    $apartment = Apartment::find($apartmentId);
+// public function getApartmentRatings(Request $request, $apartmentId)
+// {
+//     // التحقق من وجود الشقة
+//     $apartment = Apartment::find($apartmentId);
 
-    if (! $apartment) {
-        return response()->json([
-            'message' => 'Apartment not found.'
-        ], 404);
-    }
+//     if (! $apartment) {
+//         return response()->json([
+//             'message' => 'Apartment not found.'
+//         ], 404);
+//     }
 
-    $perPage = $request->input('per_page', 10);
+//     $perPage = $request->input('per_page', 10);
 
-    // حساب المتوسط وعدد التقييمات لجميع التقييمات
-    $allRatings = Rating::where('apartment_id', $apartmentId);
-    $averageRating = round($allRatings->avg('rating'), 2);
-    $totalRatings = $allRatings->count();
+//     // حساب المتوسط وعدد التقييمات لجميع التقييمات
+//     $allRatings = Rating::where('apartment_id', $apartmentId);
+//     $averageRating = round($allRatings->avg('rating'), 2);
+//     $totalRatings = $allRatings->count();
 
-    // جلب التقييمات للصفحة الحالية مع اسم المستأجر
-    $ratingsPaginated = Rating::with('user:id,first_name,last_name')
-        ->where('apartment_id', $apartmentId)
-        ->orderBy('created_at', 'desc')
-        ->simplePaginate($perPage);
+//     // جلب التقييمات للصفحة الحالية مع اسم المستأجر
+//     $ratingsPaginated = Rating::with('user:id,first_name,last_name')
+//         ->where('apartment_id', $apartmentId)
+//         ->orderBy('created_at', 'desc')
+//         ->simplePaginate($perPage);
 
-    // تجهيز البيانات للـ JSON
-    $ratingsData = $ratingsPaginated->items();
-    $ratingsData = collect($ratingsData)->map(function($r) {
-        return [
-            'user_id' => $r->user->id,
-            'user_name' => $r->user->first_name . ' ' . $r->user->last_name,
-            'rating' => $r->rating,
-            'comment' => $r->comment,
-            'created_at' => $r->created_at->toDateTimeString()
-        ];
-    });
+//     // تجهيز البيانات للـ JSON
+//     $ratingsData = $ratingsPaginated->items();
+//     $ratingsData = collect($ratingsData)->map(function($r) {
+//         return [
+//             'user_id' => $r->user->id,
+//             'user_name' => $r->user->first_name . ' ' . $r->user->last_name,
+//             'rating' => $r->rating,
+//             'comment' => $r->comment,
+//             'created_at' => $r->created_at->toDateTimeString()
+//         ];
+//     });
 
-    return response()->json([
-        'apartment_id' => $apartmentId,
-        'average_rating' => $averageRating,
-        'total_ratings' => $totalRatings,
-        'ratings' => $ratingsData,
-        'next_page_url' => $ratingsPaginated->nextPageUrl(),
-        'prev_page_url' => $ratingsPaginated->previousPageUrl(),
-    ]);
-}
+//     return response()->json([
+//         'apartment_id' => $apartmentId,
+//         'average_rating' => $averageRating,
+//         'total_ratings' => $totalRatings,
+//         'ratings' => $ratingsData,
+//         'next_page_url' => $ratingsPaginated->nextPageUrl(),
+//         'prev_page_url' => $ratingsPaginated->previousPageUrl(),
+//     ]);
+// }
 public  function updateRating(Request $request, $apartmentId)
 {
     $user = $request->user();

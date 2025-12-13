@@ -22,7 +22,7 @@ return new class extends Migration
              $table->longText('profile_photo')->nullable();
     $table->longText('id_photo')->nullable();
 
-            $table->boolean('is_approved')->default(true);
+            $table->boolean('is_approved')->default(false);
             $table->boolean('is_active')->default(true);
             $table->string('mobile')->unique();
             $table->text('address')->nullable();

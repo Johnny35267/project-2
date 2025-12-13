@@ -15,8 +15,8 @@ use HasApiTokens, HasFactory, Notifiable;
     protected $fillable = [
     'first_name' ,
     'last_name'  ,
-    'role'        ,
     'birthdate'  ,
+    'role',
     'mobile'    ,
     'password'  ,
     'profile_photo' ,
