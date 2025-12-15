@@ -31,30 +31,22 @@ use HasApiTokens, HasFactory, Notifiable;
     {
         return $this->hasMany(Apartment::class, 'user_id');
     }
-
-    /**
-     * الحجوزات التي قام بها هذا المستخدم كمستأجر
-     */
+ public function favorites()
+    {
+        return $this->hasMany(Favorite::class);
+    }
+  
     public function bookings()
     {
         return $this->hasMany(Booking::class, 'user_id');
     }
-    public function favoriteApartments()
-{
-    return $this->belongsToMany(Apartment::class, 'favorites', 'user_id', 'apartment_id')
-                ->withTimestamps();
-}
+
 public function ratings()
 {
     return $this->hasMany(Rating::class, 'user_id');
 }
 
-public function ratedApartments()
-{
-    return $this->belongsToMany(Apartment::class, 'ratings', 'user_id', 'apartment_id')
-                ->withPivot('rating','comment')
-                ->withTimestamps();
-}
+
 
     protected $hidden = [
    

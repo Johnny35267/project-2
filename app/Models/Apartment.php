@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User; // 👈 مهم جداً
+use App\Models\User; 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Apartment extends Model
@@ -28,28 +28,26 @@ class Apartment extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
-
+    
+ public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
     
     public function bookings()
     {
         return $this->hasMany(Booking::class, 'apartment_id');
     }
-    public function favoritedByUsers()
-{
-    return $this->belongsToMany(User::class, 'favorites', 'apartment_id', 'user_id')
-                ->withTimestamps();
-}
+
 public function ratings()
 {
     return $this->hasMany(Rating::class, 'apartment_id');
 }
+  public function favorites()
+    {
+        return $this->hasMany(Favorite::class);
+    }
 
-public function ratedByUsers()
-{
-    return $this->belongsToMany(User::class, 'ratings', 'apartment_id', 'user_id')
-                ->withPivot('rating','comment')
-                ->withTimestamps();
-}
 public function images()
 {
     return $this->hasMany(ApartmentImage::class);

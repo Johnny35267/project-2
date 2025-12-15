@@ -25,9 +25,7 @@ protected $casts = [
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    /**
-     * الشقة المحجوزة — FK: bookings.apartment_id
-     */
+   
     public function apartment()
     {
         return $this->belongsTo(Apartment::class, 'apartment_id');

@@ -28,19 +28,20 @@ class ApartmentController extends Controller
         ], 403);
     }
 
-    $perPage = (int) $request->get('per_page', 15);
+    $perPage = (int) $request->get('per_page', 10);
     $page = (int) $request->get('page', 1);
 
     $paginator = Apartment::with('images')
         ->withAvg('ratings', 'rating')     
         ->withCount('ratings')             
         ->where('is_approved', true)
+        ->orderByDesc('ratings_avg_rating')
         ->paginate($perPage, ['*'], 'page', $page);
 
     return response()->json([
         "status" => 1,
         'message' => 'approved apartments',
-        'data' => $paginator->items(),
+        'data' => ['apartment'=>$paginator->items()],
     ]);
 }
 public function show(Request $request, $id)
@@ -192,14 +193,14 @@ public function search(Request $request)
             'status'=>0,
             'data'=>[],
             'message' => 'Invalid filter parameters',
-            'errors'  => $validator->errors()
         ], 422);
     }
 
     $query = Apartment::with('images')
         ->withAvg('ratings', 'rating')   
         ->withCount('ratings')           
-        ->where('is_approved', true);
+        ->where('is_approved', true)
+        ->orderByDesc('ratings_avg_rating');
 
     if ($request->filled('state'))           $query->where('state', 'like', '%' . $request->state . '%');
     if ($request->filled('city'))            $query->where('city', 'like', '%' . $request->city . '%');
@@ -244,7 +245,7 @@ public function search(Request $request)
     return response()->json([
         'status' => 1,
         'message'=>'your serch',
-        'data'   => $paginator->items()
+        'data'   => ['apartment'=>$paginator->items()]
     ]);
 }
 

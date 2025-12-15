@@ -19,10 +19,8 @@ public function addToFavorite(Request $request, $apartmentId)
         ], 401);
     }
 
-    // تأكد أن الشقة موجودة
     Apartment::findOrFail($apartmentId);
 
-    // تحقق هل هي مضافة مسبقًا
     $exists = Favorite::where('user_id', $user->id)
         ->where('apartment_id', $apartmentId)
         ->where('favorite', true)
@@ -35,12 +33,10 @@ public function addToFavorite(Request $request, $apartmentId)
         ], 409);
     }
 
-    Favorite::updateOrCreate(
+    Favorite::Create(
         [
             'user_id' => $user->id,
-            'apartment_id' => $apartmentId,
-        ],
-        [
+            'apartment_id' => $apartmentId, 
             'favorite' => true
         ]
     );
@@ -84,7 +80,6 @@ public function removeFromFavorite(Request $request, $apartmentId)
     ], 200);
 }
 
-// جلب جميع الشقق المفضلة للمستخدم
 public function myFavorites(Request $request)
 {
     $user = $request->user();
@@ -107,8 +102,8 @@ public function myFavorites(Request $request)
     $page    = (int) $request->get('page', 1);
 
     $paginator = Apartment::with('images')
-        ->withAvg('ratings', 'rating')     // ⭐ متوسط التقييم
-        ->withCount('ratings')             // 👤 عدد المقيمين
+        ->withAvg('ratings', 'rating')     
+        ->withCount('ratings')             
         ->whereHas('favorites', function ($q) use ($user) {
             $q->where('user_id', $user->id)
               ->where('favorite', true);

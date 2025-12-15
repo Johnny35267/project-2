@@ -192,46 +192,44 @@ class BookingController extends Controller
     }
 
     
-    public function ownerIndex(Request $request)
-    {
-        $user = $request->user();
+ public function ownerIndex(Request $request)
+{
+    $user = $request->user();
 
-        if (! $user) {
-            return response()->json([
-            'status'=>0,
-            'data'=>[],    
-            'message' => 'Unauthenticated'], 401);
-        }
-
-        $request->validate([
-            'status' => 'nullable|in:pending,approved,rejected,cancelled',
-            'apartment_id' => 'nullable|integer|exists:apartments,id',
-            'per_page' => 'nullable|integer|min:1|max:100'
-        ]);
-
-        $perPage = $request->input('per_page', 20);
-
-        $query = Booking::with(['user', 'apartment'])
-            ->whereHas('apartment', function ($q) use ($user, $request) {
-                $q->where('user_id', $user->id);
-
-                if ($request->filled('apartment_id')) {
-                    $q->where('id', $request->input('apartment_id'));
-                }
-            });
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
-        }
-
-        $query->orderBy('created_at', 'desc');
-
-        $paginator = $query->paginate($perPage);
-
-        $items = $paginator->items();
-
-        return response()->json($items);
+    if (! $user) {
+        return response()->json([
+            'status' => 0,
+            'data' => [],
+            'message' => 'Unauthenticated'
+        ], 401);
     }
+
+    $request->validate([
+        'apartment_id' => 'nullable|integer|exists:apartments,id',
+        'per_page' => 'nullable|integer|min:1|max:100'
+    ]);
+
+    $perPage = $request->input('per_page', 20);
+
+    $query = Booking::with(['user', 'apartment'])
+        ->where('status', 'pending') 
+        ->whereHas('apartment', function ($q) use ($user, $request) {
+            $q->where('user_id', $user->id);
+
+            if ($request->filled('apartment_id')) {
+                $q->where('id', $request->input('apartment_id'));
+            }
+        })
+        ->orderBy('created_at', 'desc');
+
+    $paginator = $query->paginate($perPage);
+
+    return response()->json([
+        'status' => 1,
+        'data' => $paginator->items()
+    ]);
+}
+
 
    
     public function approve(Request $request, $id)

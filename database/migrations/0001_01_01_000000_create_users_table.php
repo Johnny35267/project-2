@@ -17,11 +17,8 @@ return new class extends Migration
             $table->string('last_name', 100);
             $table->enum('role', ['landlord', 'tenant', 'admin'])->default('tenant');
             $table->date('birthdate')->nullable();
-            // $table->string('profile_photo')->nullable();
-            // $table->string('id_photo')->nullable();
-             $table->longText('profile_photo')->nullable();
-    $table->longText('id_photo')->nullable();
-
+            $table->longText('profile_photo')->nullable();
+            $table->longText('id_photo')->nullable();
             $table->boolean('is_approved')->default(false);
             $table->boolean('is_active')->default(true);
             $table->string('mobile')->unique();
