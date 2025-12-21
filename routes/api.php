@@ -50,7 +50,9 @@ Route::middleware('auth:sanctum')->group(function () {
  Route::get('/user/verified',[AuthController::class,'verified']);
 
 });
-
+Route::get('/users', function () {
+    return 'omar';
+});
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
