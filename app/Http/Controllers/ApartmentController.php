@@ -261,5 +261,37 @@ $items = collect($paginator->items())->map(function ($apartment) {
         'data'   => ['apartment'=>$items]
     ]);
 }
+public function getOwnerByApartment($apartmentId)
+{
+    $apartment = Apartment::with('owner')
+        ->where('is_approved', true)
+        ->find($apartmentId);
+
+    if (! $apartment || ! $apartment->owner) {
+        return response()->json([
+            'status' => 0,
+            'data' => [],
+            'message' => 'Apartment or owner not found'
+        ], 404);
+    }
+
+    $owner = $apartment->owner;
+
+    return response()->json([
+        'status' => 1,
+        'message' => 'Apartment owner info',
+        'data' => [
+            'owner' => [
+                'id'           => $owner->id,
+                'first_name'   => $owner->first_name,
+                'last_name'    => $owner->last_name,
+                'mobile'       => $owner->mobile,
+                'address'      => $owner->address,
+                'profile_photo'=> $owner->profile_photo,
+                'role'         => $owner->role,
+            ]
+        ]
+    ]);
+}
 
 }

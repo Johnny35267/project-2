@@ -13,6 +13,7 @@ use App\Http\Controllers\RatingController;
 
  Route::post('/register', [AuthController::class, 'register']);
  Route::post('/login',    [AuthController::class, 'login']);
+Route::get('/apartments/{id}/owner', [ApartmentController::class, 'getOwnerByApartment']);
 
  
 Route::middleware('auth:sanctum')->group(function () {

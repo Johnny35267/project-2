@@ -54,6 +54,8 @@ public function register(Request $request)
         "status"=>1,
         'message' => 'User registered successfully. Pending admin approval.',
        "data"=>[
+        
+        'user'=>$user,
         'token'   => $token] 
     ], 201);
 }
