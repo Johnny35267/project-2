@@ -18,7 +18,7 @@ return new class extends Migration
         $table->string('title');
         $table->text('body');
         $table->boolean('is_read')->default(false); // هل تمت القراءة؟
-      
+       $table->timestamps(); 
         });
     }
 

@@ -10,6 +10,9 @@ use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\RatingController;
 
 
+Route::get('/check-admin', function() {
+    return \App\Models\User::where('role', 'admin')->get();
+});
 
  Route::post('/register', [AuthController::class, 'register']);
  Route::post('/login',    [AuthController::class, 'login']);

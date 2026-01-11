@@ -7,58 +7,103 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
+use App\Models\AppNotification; // تأكد من إنشاء هذا الموديل كما شرحنا سابقاً
+use Kreait\Firebase\Factory;
+use Kreait\Firebase\Messaging\CloudMessage;
+use Kreait\Firebase\Messaging\Notification;
+
 class AuthController extends Controller
 { 
 
-public function register(Request $request)
-{
-    $data = $request->validate([
-        'first_name'     => 'required|string|max:100',
-        'last_name'      => 'required|string|max:100',
-        // 'role'           => 'nullable|in:landlord,tenant,admin',
-        'birthdate'      => 'nullable|date',
-        'mobile'         => 'required|string|unique:users,mobile',
-        'password'       => 'required|min:8',
-        'profile_photo'  => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:5120',
-        'id_photo'       => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:5120',
-        'address'        => 'nullable|string',
-        'card_type'      => 'required|in:visa,master,amex,discover',
-        'card_number'    => 'required|string',
-        'security_code'  => 'required|string',
-        'expiry_date'    => 'required|date',
-    ]);
 
-    if(User::where('mobile', $data['mobile'])->first()){
+    public function register(Request $request)
+    {
+        $data = $request->validate([
+            'first_name'     => 'required|string|max:100',
+            'last_name'      => 'required|string|max:100',
+            // 'role'        => 'nullable|in:landlord,tenant,admin',
+            'birthdate'      => 'nullable|date',
+            'mobile'         => 'required|string|unique:users,mobile',
+            'password'       => 'required|min:8',
+            'profile_photo'  => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'id_photo'       => 'nullable|file|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'address'        => 'nullable|string',
+            'card_type'      => 'required|in:visa,master,amex,discover',
+            'card_number'    => 'required|string',
+            'security_code'  => 'required|string',
+            'expiry_date'    => 'required|date',
+            'fcm_token'      => 'nullable|string', 
+        ]);
+
+        if(User::where('mobile', $data['mobile'])->first()){
+            return response()->json([
+                "status"  => 0,
+                'data'    => [],
+                'message' => 'User already exists'
+            ], 403);
+        }
+
+        $data['password'] = Hash::make($data['password']);
+
+        if ($request->hasFile('profile_photo')) {
+            $data['profile_photo'] = base64_encode(file_get_contents($request->file('profile_photo')->getRealPath()));
+        }
+
+        if ($request->hasFile('id_photo')) {
+            $data['id_photo'] = base64_encode(file_get_contents($request->file('id_photo')->getRealPath()));
+        }
+
+        $newUser = User::create($data);
+        $token = $newUser->createToken('auth_token')->plainTextToken;
+
+
+        try {
+            $admins = User::where('role', 'admin')->get();
+
+            if ($admins->count() > 0) {
+                $factory = (new Factory)->withServiceAccount(storage_path('app/firebase_credentials.json'));
+                $messaging = $factory->createMessaging();
+                $notifTitle = 'تسجيل جديد';
+                $notifBody  = "قام {$newUser->first_name} {$newUser->last_name} بالتسجيل، بانتظار الموافقة.";
+
+                foreach ($admins as $admin) {
+                    
+                    AppNotification::create([
+                        'user_id' => $admin->id,
+                        'title'   => $notifTitle,
+                        'body'    => $notifBody,
+                        'is_read' => false,
+                    ]);
+
+                    if ($admin->fcm_token) {
+                        try {
+                            $notification = Notification::create($notifTitle, $notifBody);
+                            
+                            $message = CloudMessage::withTarget('token', $admin->fcm_token)
+                                ->withNotification($notification)
+                                ->withData(['user_id' => strval($newUser->id)]); // إرسال ID المستخدم الجديد كـ String
+
+                            $messaging->send($message);
+                        } catch (\Throwable $e) {
+
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+
+        }
+
         return response()->json([
-            "status"=>0,
-            'data'=>[],
-            'message' => 'User already exists'
-        ], 403);
+            "status"  => 1,
+            'message' => 'User registered successfully. Pending admin approval.',
+            "data"    => [
+                'user'=>$newUser,
+                'token' => $token
+            ] 
+        ], 201);
     }
 
-    $data['password'] = Hash::make($data['password']);
-
-    if ($request->hasFile('profile_photo')) {
-        $data['profile_photo'] = base64_encode(file_get_contents($request->file('profile_photo')->getRealPath()));
-    }
-
-    if ($request->hasFile('id_photo')) {
-        $data['id_photo'] = base64_encode(file_get_contents($request->file('id_photo')->getRealPath()));
-    }
-
-    $user = User::create($data);
-
-    $token = $user->createToken('auth_token')->plainTextToken;
-
-    return response()->json([
-        "status"=>1,
-        'message' => 'User registered successfully. Pending admin approval.',
-       "data"=>[
-        
-        'user'=>$user,
-        'token'   => $token] 
-    ], 201);
-}
     public function login(Request $request){
     
   
