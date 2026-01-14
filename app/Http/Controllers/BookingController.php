@@ -287,131 +287,173 @@ class BookingController extends Controller
 
 
    
+ 
     public function approve(Request $request, $id)
-{
-    $user = $request->user();
+    {
+        $user = $request->user(); 
 
-          if (! $user) {
+        if (! $user) {
             return response()->json([
-            'status'=>0,
-            'data'=>[],    
-            'message' => 'Unauthenticated'], 401);
+                'status' => 0,
+                'data' => [],
+                'message' => 'Unauthenticated'
+            ], 401);
         }
 
-    $booking = Booking::with('apartment')->find($id);
+        $booking = Booking::with('apartment')->find($id);
 
-    if (! $booking) {
-        return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'Booking not found.'], 404);
-    }
-
-    if ($booking->apartment->user_id !== $user->id) {
-        return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'Unauthorized.'], 403);
-    }
-
-    DB::beginTransaction();
-
-    try {
-        $booking = Booking::where('id', $booking->id)->lockForUpdate()->first();
-
-        if ($booking->status === 'approved') {
-            DB::rollBack();
+        if (! $booking) {
             return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'Booking already approved.'], 400);
+                'status' => 0,
+                'data' => [],
+                'message' => 'Booking not found.'
+            ], 404);
         }
 
-        $start = $booking->start_date;
-        $end = $booking->end_date;
-        $apartmentId = $booking->apartment_id;
-
-
-
-
- $start_date = Carbon::parse($booking->start_date)->startOfDay();
-        $end_date   = Carbon::parse($booking->end_date)->startOfDay();
-
-        $days = $start_date->diffInDays($end_date);
-        if ($days <= 0) $days = 1;
-
-        $pricePerDay = (float) ($booking->apartment->price );
-        $requiredAmount = $pricePerDay * $days;
-
-        $renter = User::where('id', $booking->user_id)->lockForUpdate()->first();
-
-        if (! $renter) {
-            DB::rollBack();
+        if ($booking->apartment->user_id !== $user->id) {
             return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'Renter not found.'], 404);
+                'status' => 0,
+                'data' => [],
+                'message' => 'Unauthorized.'
+            ], 403);
         }
 
-        $currentBalance = (float) ($renter->account ?? 0);
+        DB::beginTransaction();
 
-        if ($currentBalance < $requiredAmount) {
-            DB::rollBack();
-            return response()->json([
-                'status'=>0,
-                'message' => 'Renter has insufficient balance to pay for this booking.',
-                'data'=>['required_amount' => $requiredAmount,
-                'current_balance' => $currentBalance]
+        try {
+            $booking = Booking::where('id', $booking->id)->lockForUpdate()->first();
 
-            ], 402);
-        }
+            if ($booking->status === 'approved') {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'data' => [],
+                    'message' => 'Booking already approved.'
+                ], 400);
+            }
+
+            $start = $booking->start_date;
+            $end = $booking->end_date;
+            $apartmentId = $booking->apartment_id;
+
+            $start_date = Carbon::parse($booking->start_date)->startOfDay();
+            $end_date   = Carbon::parse($booking->end_date)->startOfDay();
+
+            $days = $start_date->diffInDays($end_date);
+            if ($days <= 0) $days = 1;
+
+            $pricePerDay = (float) ($booking->apartment->price);
+            $requiredAmount = $pricePerDay * $days;
+
+            $renter = User::where('id', $booking->user_id)->lockForUpdate()->first();
+
+            if (! $renter) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'data' => [],
+                    'message' => 'Renter not found.'
+                ], 404);
+            }
+
+            $currentBalance = (float) ($renter->account ?? 0);
+
+            if ($currentBalance < $requiredAmount) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Renter has insufficient balance to pay for this booking.',
+                    'data' => [
+                        'required_amount' => $requiredAmount,
+                        'current_balance' => $currentBalance
+                    ]
+                ], 402);
+            }
+
+            $overlapping = Booking::where('apartment_id', $apartmentId)
+                ->where('id', '<>', $booking->id)
+                ->where('start_date', '<=', $end)
+                ->where('end_date', '>=', $start)
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->get();
+
+            Booking::where('apartment_id', $apartmentId)
+                ->where('id', '<>', $booking->id)
+                ->where('start_date', '<=', $end)
+                ->where('end_date', '>=', $start)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'rejected',
+                    'updated_at' => now()
+                ]);
+
+            $renter->account = $currentBalance - $requiredAmount;
+            
+            $user->account = $user->account + floor($requiredAmount * 90 / 100);
+            
+            $admin = User::findOrFail(1); 
+            $admin->account = $admin->account + ceil($requiredAmount * 10 / 100);
+
+            $user->save();
+            $admin->save();
+            $renter->save();
+
+            $booking->status = 'approved';
+            $booking->save();
 
 
-        $overlapping = Booking::where('apartment_id', $apartmentId)
-            ->where('id', '<>', $booking->id)
-            ->where('start_date', '<=', $end)
-            ->where('end_date', '>=', $start)
-            ->where('status', 'pending') 
-            ->lockForUpdate()
-            ->get();
+            $notifTitle = 'تمت الموافقة على الحجز ';
+            $notifBody  = "وافق صاحب الشقة على حجزك لـ {$booking->apartment->name}. نتمنى لك إقامة سعيدة!";
 
-        Booking::where('apartment_id', $apartmentId)
-            ->where('id', '<>', $booking->id)
-            ->where('start_date', '<=', $end)
-            ->where('end_date', '>=', $start)
-            ->where('status', 'pending')   
-            ->update([
-                'status' => 'rejected',
-                'updated_at' => now()
+            AppNotification::create([
+                'user_id'    => $renter->id,
+                'title'      => $notifTitle,
+                'body'       => $notifBody,
+                'type'       => 'booking_approved',
+                'related_id' => $booking->id,
+                'is_read'    => false,
             ]);
-  $renter->account = $currentBalance - $requiredAmount;
-  $user->account= $user->account+ floor($requiredAmount*90/100);
-  $admin=User::findOrFail(1);
-  $admin->account= $admin->account+ ceil($requiredAmount*10/100);
-        $user->save();
-        $admin->save();
-        $renter->save();
-        $booking->status = 'approved';
-        $booking->save();
 
-        DB::commit();
+            try {
+                if ($renter->fcm_token) {
+                    $messaging = app('firebase.messaging');
+                    
+                    $fcmNotification = Notification::create($notifTitle, $notifBody);
+                    
+                    $message = CloudMessage::withTarget('token', $renter->fcm_token)
+                        ->withNotification($fcmNotification)
+                        ->withData([
+                            'booking_id' => (string) $booking->id,
+                            'type'       => 'booking_approved',
+                            'status'     => 'approved'
+                        ]);
 
-        return response()->json([
-            'message' => 'Booking approved. Pending overlapping bookings rejected.',
-            'approved_booking_id' => $booking->id,
-            'rejected_pending_count' => $overlapping->count(),
-            'rejected_pending_ids' => $overlapping->pluck('id')->values()
-        ]);
+                    $messaging->send($message);
+                }
+            } catch (\Throwable $fcmError) {
+                Log::error("Failed to send approval notification to renter: " . $fcmError->getMessage());
+            }
 
-    } catch (\Throwable $e) {
-        DB::rollBack();
-        return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'Error approving booking.',
-        ], 500);
+            DB::commit();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Booking approved. Payment transferred and notification sent.',
+                'approved_booking_id' => $booking->id,
+                'rejected_pending_count' => $overlapping->count(),
+                'rejected_pending_ids' => $overlapping->pluck('id')->values()
+            ]);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 0,
+                'data' => [],
+                'message' => 'Error approving booking: ' . $e->getMessage(),
+            ], 500);
+        }
     }
-}
 
    
     public function reject(Request $request, $id)
