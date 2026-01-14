@@ -3,100 +3,155 @@
 namespace App\Http\Controllers;
 
 use App\Models\Apartment;
+use App\Models\AppNotification;
 use App\Models\Booking;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Kreait\Firebase\Messaging\Notification;
+use Kreait\Firebase\Messaging\CloudMessage;
 
 class BookingController extends Controller
 {
-     public function store(Request $request, $apartmentId)
-{
-    try {
-        $request->validate([
-            'start_date' => 'required|date|after_or_equal:today',
-            'end_date' => 'required|date|after:start_date',
-        ]);
-
-        $user = $request->user();
-        if (! $user) {
-            return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'no auth'], 401);
-        }
-        if (!$user->is_approved) {
-        return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'Account awaiting admin approval. Please wait.'
-        ], 403);}
-
-        $apartment = Apartment::findOrFail($apartmentId);
-
-        $start = Carbon::parse($request->start_date)->toDateString();
-        $end = Carbon::parse($request->end_date)->toDateString();
-
-        $hasExistingBooking = Booking::where('user_id', $user->id)
-            ->where('apartment_id', $apartment->id) 
-            ->whereNotIn('status', ['cancelled', 'rejected'])
-            ->where(function ($q) use ($start, $end) {
-                $q->where('start_date', '<=', $end)
-                  ->where('end_date', '>=', $start);
-            })
-            ->exists();
-
-        if ($hasExistingBooking) {
-            return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'you already have a booking for this apartment during this date range',
-            ], 409);
-        }
-
-    $start_date = Carbon::parse($request->start_date)->startOfDay();
-    $end_date  = Carbon::parse($request->end_date)->startOfDay();
-    $days  = $start_date->diffInDays($end_date);
-    if ($days <= 0) $days = 1;
-
-    $requiredAmount = (float) ($apartment->price ) * $days;
-    $currentBalance = (float) ($user->account);
-
- if ($currentBalance < $requiredAmount) {
-        return response()->json([
-            'status'=>0,
-            'data'=>[
-            'required_amount' => $requiredAmount,
-            'current_balance' => $currentBalance],
-            'message' => 'Insufficient balance to make this booking',
-            
-        ], 402);
-    }
     
+    public function store(Request $request, $apartmentId)
+    {
+        try {
+            $request->validate([
+                'start_date' => 'required|date|after_or_equal:today',
+                'end_date'   => 'required|date|after:start_date',
+            ]);
 
-        $booking = Booking::create([
-            'apartment_id' => $apartment->id,
-            'user_id' => $user->id,
-            'start_date' => $start,
-            'end_date' => $end,
-            'status' => 'pending',
-        ]);
+            $user = $request->user();
+            if (! $user) {
+                return response()->json([
+                    'status' => 0,
+                    'data' => [],
+                    'message' => 'no auth'
+                ], 401);
+            }
 
-        return response()->json([
-            'status'=>1,
-            'message' => 'your request has been submitted to the owner. please wait for approval',
-           'data'=> ['booking' => $booking]
-        ], 201);
+            if (!$user->is_approved) {
+                return response()->json([
+                    'status' => 0,
+                    'data' => [],
+                    'message' => 'Account awaiting admin approval. Please wait.'
+                ], 403);
+            }
 
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        return response()->json([
-            'status'=>0,
-            'data'=>[],
-            'message' => 'apartment is not exist',
-        ], 404);
+            $apartment = Apartment::with('owner')->findOrFail($apartmentId);
+
+            $start = Carbon::parse($request->start_date)->toDateString();
+            $end   = Carbon::parse($request->end_date)->toDateString();
+
+            $hasExistingBooking = Booking::where('user_id', $user->id)
+                ->where('apartment_id', $apartment->id)
+                ->whereNotIn('status', ['cancelled', 'rejected'])
+                ->where(function ($q) use ($start, $end) {
+                    $q->where('start_date', '<=', $end)
+                      ->where('end_date', '>=', $start);
+                })
+                ->exists();
+
+            if ($hasExistingBooking) {
+                return response()->json([
+                    'status' => 0,
+                    'data' => [],
+                    'message' => 'You already have a booking for this apartment during this date range',
+                ], 409);
+            }
+
+            $start_date = Carbon::parse($request->start_date)->startOfDay();
+            $end_date   = Carbon::parse($request->end_date)->startOfDay();
+            $days       = $start_date->diffInDays($end_date);
+            if ($days <= 0) $days = 1;
+
+            $requiredAmount = (float) ($apartment->price) * $days;
+            $currentBalance = (float) ($user->account);
+
+            if ($currentBalance < $requiredAmount) {
+                return response()->json([
+                    'status' => 0,
+                    'data' => [
+                        'required_amount' => $requiredAmount,
+                        'current_balance' => $currentBalance
+                    ],
+                    'message' => 'Insufficient balance to make this booking',
+                ], 402);
+            }
+
+            $booking = Booking::create([
+                'apartment_id' => $apartment->id,
+                'user_id'      => $user->id,
+                'start_date'   => $start,
+                'end_date'     => $end,
+                'status'       => 'pending',
+                'total_price'  => $requiredAmount, 
+            ]);
+
+       
+            try {
+                $owner = $apartment->owner;
+
+                if ($owner) {
+                    $notifTitle = 'طلب حجز جديد';
+                    $notifBody  = "لديك طلب حجز جديد من {$user->first_name} على شقة: {$apartment->name}";
+
+                  
+                    AppNotification::create([
+                        'user_id' => $owner->id, 
+                        'title'   => $notifTitle,
+                        'body'    => $notifBody,
+
+                    ]);
+
+                    if ($owner->fcm_token) {
+                        $messaging = app('firebase.messaging');
+                        
+                        $notification = Notification::create($notifTitle, $notifBody);
+                        
+                        $message = CloudMessage::withTarget('token', $owner->fcm_token)
+                            ->withNotification($notification)
+                            ->withData([
+                                'booking_id' => (string) $booking->id,
+                                'type'       => 'booking_request'
+                            ]);
+
+                        $messaging->send($message);
+                    }
+                }
+
+            } catch (\Throwable $e) {
+  return response()->json([
+                'status'  => 0,
+                'message' => 'Somethingخخ went wrong',
+                'error'   => $e->getMessage()
+            ], 500);
+            }
+
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Your request has been submitted to the owner. Please wait for approval',
+                'data'    => ['booking' => $booking]
+            ], 201);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'status'  => 0,
+                'data'    => [],
+                'message' => 'Apartment does not exist',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Something went wrong',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
     }
-}
+
 
     
     public function update(Request $request, $bookingId)
